@@ -103,6 +103,10 @@ function removeRegion(audioBuffer: AudioBuffer, start: number, end: number): Aud
   return newBuffer
 }
 
+function easeInOutSine(t: number): number {
+  return 0.5 * (1 - Math.cos(Math.PI * t))
+}
+
 function applyFadeInOut(
   audioBuffer: AudioBuffer,
   fadeInSeconds: number,
@@ -124,19 +128,21 @@ function applyFadeInOut(
 
     for (let i = 0; i < length; i++) {
       let sample = sourceData[i]
+      let gain = 1
 
       if (fadeInSamples > 0 && i < fadeInSamples) {
-        const gain = i / fadeInSamples
-        sample *= gain
+        const t = i / fadeInSamples
+        gain = easeInOutSine(t)
       }
 
       if (fadeOutSamples > 0 && i >= length - fadeOutSamples) {
         const fadeOutIndex = i - (length - fadeOutSamples)
-        const gain = 1 - fadeOutIndex / fadeOutSamples
-        sample *= gain
+        const t = fadeOutIndex / fadeOutSamples
+        const fadeOutGain = 1 - easeInOutSine(t)
+        gain = Math.min(gain, fadeOutGain)
       }
 
-      targetData[i] = sample
+      targetData[i] = sample * gain
     }
   }
 
