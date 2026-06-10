@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref } from 'vue'
 import { Headphones } from 'lucide-vue-next'
 import { useAudioStore } from '@/stores/audio'
 import { useAudioClipper } from '@/composables/useAudioClipper'
@@ -12,34 +12,20 @@ import ExportPanel from '@/components/ExportPanel.vue'
 const store = useAudioStore()
 const clipper = useAudioClipper()
 const waveformRef = ref<InstanceType<typeof WaveformDisplay> | null>(null)
-const pendingFile = ref<File | null>(null)
 let lastObjectUrl: string | null = null
 
 function handleFileSelected(file: File) {
-  pendingFile.value = file
-  store.setFile(file)
+  store.setSourceFromFile(file)
 }
-
-watch(() => store.hasFile, (hasFile) => {
-  if (hasFile && pendingFile.value) {
-    nextTick(() => {
-      if (waveformRef.value && pendingFile.value) {
-        waveformRef.value.loadFile(pendingFile.value)
-        pendingFile.value = null
-      }
-    })
-  }
-})
 
 function handleAudioUpdated() {
   const blob = clipper.exportAudio()
-  if (blob && waveformRef.value) {
+  if (blob) {
     if (lastObjectUrl) {
       URL.revokeObjectURL(lastObjectUrl)
     }
     lastObjectUrl = URL.createObjectURL(blob)
-    waveformRef.value.loadUrl(lastObjectUrl)
-    store.region = null
+    store.setSourceFromUrl(lastObjectUrl)
   }
 }
 

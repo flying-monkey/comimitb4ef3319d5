@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+export type AudioSource =
+  | { type: 'file'; file: File }
+  | { type: 'url'; url: string }
+  | null
+
 export const useAudioStore = defineStore('audio', () => {
   const file = ref<File | null>(null)
   const fileName = ref('')
@@ -15,6 +20,7 @@ export const useAudioStore = defineStore('audio', () => {
   const clipHistory = ref<AudioBuffer[]>([])
   const exportFormat = ref<'wav' | 'mp3'>('wav')
   const isProcessing = ref(false)
+  const pendingSource = ref<AudioSource>(null)
 
   const hasFile = computed(() => !!file.value)
   const hasRegion = computed(() => !!region.value)
@@ -36,6 +42,24 @@ export const useAudioStore = defineStore('audio', () => {
   function setFile(f: File) {
     file.value = f
     fileName.value = f.name.replace(/\.[^/.]+$/, '')
+  }
+
+  function setSourceFromFile(f: File) {
+    setFile(f)
+    region.value = null
+    clipHistory.value = []
+    pendingSource.value = { type: 'file', file: f }
+  }
+
+  function setSourceFromUrl(url: string) {
+    region.value = null
+    pendingSource.value = { type: 'url', url }
+  }
+
+  function consumeSource(): AudioSource {
+    const src = pendingSource.value
+    pendingSource.value = null
+    return src
   }
 
   function setAudioBuffer(buf: AudioBuffer) {
@@ -65,6 +89,7 @@ export const useAudioStore = defineStore('audio', () => {
     clipHistory.value = []
     exportFormat.value = 'wav'
     isProcessing.value = false
+    pendingSource.value = null
   }
 
   return {
@@ -81,6 +106,7 @@ export const useAudioStore = defineStore('audio', () => {
     clipHistory,
     exportFormat,
     isProcessing,
+    pendingSource,
     hasFile,
     hasRegion,
     regionDuration,
@@ -89,6 +115,9 @@ export const useAudioStore = defineStore('audio', () => {
     formattedDuration,
     formatTime,
     setFile,
+    setSourceFromFile,
+    setSourceFromUrl,
+    consumeSource,
     setAudioBuffer,
     pushHistory,
     popHistory,

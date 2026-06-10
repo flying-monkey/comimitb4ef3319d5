@@ -5,6 +5,7 @@ import { useAudioStore } from '@/stores/audio'
 
 const store = useAudioStore()
 const waveformContainer = ref<HTMLElement | null>(null)
+const isMounted = ref(false)
 const {
   isReady,
   init,
@@ -50,10 +51,30 @@ watch(zoomValue, (val) => {
   setZoom(val)
 })
 
-onMounted(() => {
+function processPendingSource() {
+  if (!store.pendingSource) return
+  const source = store.consumeSource()
+  if (!source) return
   nextTick(() => {
-    init()
+    if (source.type === 'file') {
+      loadFile(source.file)
+    } else if (source.type === 'url') {
+      loadUrl(source.url)
+    }
   })
+}
+
+watch(() => store.pendingSource, () => {
+  if (!isMounted.value) return
+  processPendingSource()
+})
+
+onMounted(async () => {
+  await nextTick()
+  init()
+  isMounted.value = true
+  await nextTick()
+  processPendingSource()
 })
 </script>
 
@@ -80,15 +101,9 @@ onMounted(() => {
 
       <div
         ref="waveformContainer"
-        class="waveform-container rounded-lg overflow-hidden min-h-[160px] bg-bg-primary/50"
+        class="waveform-container rounded-lg overflow-hidden bg-bg-primary/50"
         :class="{ 'opacity-50': !isReady && store.hasFile }"
       />
-
-      <div v-if="!store.hasFile" class="absolute inset-0 flex items-center justify-center pointer-events-none" style="top: 40px">
-        <div class="text-center">
-          <p class="text-text-muted text-sm">请先上传音频文件</p>
-        </div>
-      </div>
 
       <div class="flex items-center gap-4 mt-3">
         <span class="text-xs text-text-muted font-mono">缩放</span>
@@ -107,6 +122,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.waveform-container {
+  min-height: 160px;
+}
+
 .waveform-display :deep(.wavesurfer) {
   overflow: hidden !important;
 }

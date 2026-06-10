@@ -104,7 +104,9 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
     if (!wavesurfer) {
       init()
     }
-    store.setFile(file)
+    if (!store.file) {
+      store.setFile(file)
+    }
     store.region = null
     store.currentTime = 0
     store.isPlaying = false
