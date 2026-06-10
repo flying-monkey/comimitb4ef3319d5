@@ -1,4 +1,4 @@
-import { ref, onUnmounted, type Ref } from 'vue'
+import { ref, watch, onUnmounted, type Ref } from 'vue'
 import WaveSurfer from 'wavesurfer.js'
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js'
 import { useAudioStore } from '@/stores/audio'
@@ -7,11 +7,18 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
   const store = useAudioStore()
   let wavesurfer: WaveSurfer | null = null
   let regionsPlugin: RegionsPlugin | null = null
-  let activeRegion: ReturnType<RegionsPlugin['addRegion']> | null = null
+  let activeRegion: any = null
   const isReady = ref(false)
 
   function init() {
     if (!containerRef.value) return
+
+    if (wavesurfer) {
+      wavesurfer.destroy()
+      wavesurfer = null
+      regionsPlugin = null
+      activeRegion = null
+    }
 
     regionsPlugin = RegionsPlugin.create()
 
@@ -26,17 +33,21 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
       barRadius: 2,
       height: 160,
       normalize: true,
-      backend: 'WebAudio',
       plugins: [regionsPlugin],
     })
 
     wavesurfer.on('ready', () => {
       isReady.value = true
-      const buffer = wavesurfer!.getDecodedData()
-      if (buffer) {
-        store.setAudioBuffer(buffer)
+      const duration = wavesurfer!.getDuration()
+      store.duration = duration
+      
+      const decodedData = wavesurfer!.getDecodedData()
+      if (decodedData) {
+        store.setAudioBuffer(decodedData)
       }
+      
       wavesurfer!.setVolume(store.volume)
+      wavesurfer!.setPlaybackRate(store.playbackRate)
     })
 
     wavesurfer.on('timeupdate', (time) => {
@@ -51,15 +62,13 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
       store.isPlaying = false
     })
 
-    wavesurfer.on('interaction', (newTime) => {
-      if (activeRegion && store.region) {
-        const { start, end } = store.region
-        if (newTime >= start && newTime <= end) {
-          wavesurfer!.setTime(start)
-          wavesurfer!.play()
-          return
-        }
-      }
+    wavesurfer.on('finish', () => {
+      store.isPlaying = false
+      store.currentTime = store.duration
+    })
+
+    wavesurfer.on('error', (err) => {
+      console.error('WaveSurfer error:', err)
     })
 
     enableRegionCreation()
@@ -69,26 +78,25 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
     if (!regionsPlugin) return
 
     regionsPlugin.enableDragSelection({
-      color: 'rgba(255, 107, 53, 0.2)',
+      color: 'rgba(255, 107, 53, 0.3)',
     })
 
-    regionsPlugin.on('region-created', (region) => {
-      if (activeRegion) {
+    regionsPlugin.on('region-created', (region: any) => {
+      if (activeRegion && activeRegion.id !== region.id) {
         activeRegion.remove()
       }
       activeRegion = region
       store.region = { start: region.start, end: region.end }
     })
 
-    regionsPlugin.on('region-updated', (region) => {
+    regionsPlugin.on('region-updated', (region: any) => {
       activeRegion = region
       store.region = { start: region.start, end: region.end }
     })
 
-    regionsPlugin.on('region-clicked', (region, e) => {
+    regionsPlugin.on('region-clicked', (region: any, e: MouseEvent) => {
       e.stopPropagation()
-      const { start, end } = region
-      wavesurfer!.play(start, end)
+      wavesurfer?.play(region.start, region.end)
     })
   }
 
@@ -97,43 +105,61 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
       init()
     }
     store.setFile(file)
+    store.region = null
+    store.currentTime = 0
+    store.isPlaying = false
+    activeRegion = null
     isReady.value = false
     wavesurfer!.loadBlob(file)
   }
 
   function loadBlob(blob: Blob) {
     if (!wavesurfer) return
+    store.region = null
+    activeRegion = null
     isReady.value = false
     wavesurfer.loadBlob(blob)
   }
 
   function loadUrl(url: string) {
     if (!wavesurfer) return
+    store.region = null
+    store.currentTime = 0
+    store.isPlaying = false
+    activeRegion = null
     isReady.value = false
     wavesurfer.load(url)
   }
 
   function play() {
-    wavesurfer?.play()
+    if (wavesurfer) {
+      wavesurfer.play()
+    }
   }
 
   function pause() {
-    wavesurfer?.pause()
+    if (wavesurfer) {
+      wavesurfer.pause()
+    }
   }
 
   function stop() {
-    wavesurfer?.stop()
+    if (wavesurfer) {
+      wavesurfer.stop()
+    }
     store.currentTime = 0
     store.isPlaying = false
   }
 
   function playPause() {
-    wavesurfer?.playPause()
+    if (wavesurfer) {
+      wavesurfer.playPause()
+    }
   }
 
   function playRegion() {
-    if (!activeRegion || !wavesurfer) return
-    const { start, end } = activeRegion
+    if (!activeRegion || !wavesurfer || !store.hasRegion) return
+    const { start, end } = store.region
     wavesurfer.play(start, end)
   }
 
@@ -144,9 +170,7 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
 
   function setPlaybackRate(rate: number) {
     store.playbackRate = rate
-    if (wavesurfer) {
-      wavesurfer.setPlaybackRate(rate)
-    }
+    wavesurfer?.setPlaybackRate(rate)
   }
 
   function setZoom(level: number) {
@@ -155,13 +179,15 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
   }
 
   function skip(seconds: number) {
-    if (!wavesurfer) return
+    if (!wavesurfer || !store.duration) return
     const newTime = Math.max(0, Math.min(store.duration, store.currentTime + seconds))
     wavesurfer.setTime(newTime)
   }
 
   function seekTo(time: number) {
-    wavesurfer?.setTime(time)
+    if (wavesurfer) {
+      wavesurfer.setTime(time)
+    }
   }
 
   function clearRegion() {
@@ -179,6 +205,13 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
     activeRegion = null
     isReady.value = false
   }
+
+  watch(() => store.region, (newRegion) => {
+    if (!newRegion && activeRegion) {
+      activeRegion.remove()
+      activeRegion = null
+    }
+  })
 
   onUnmounted(() => {
     destroy()

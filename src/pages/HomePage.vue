@@ -13,26 +13,33 @@ const store = useAudioStore()
 const clipper = useAudioClipper()
 const waveformRef = ref<InstanceType<typeof WaveformDisplay> | null>(null)
 const pendingFile = ref<File | null>(null)
+let lastObjectUrl: string | null = null
 
 function handleFileSelected(file: File) {
   pendingFile.value = file
   store.setFile(file)
 }
 
-watch(() => waveformRef.value, (comp) => {
-  if (comp && pendingFile.value) {
+watch(() => store.hasFile, (hasFile) => {
+  if (hasFile && pendingFile.value) {
     nextTick(() => {
-      comp.loadFile(pendingFile.value!)
-      pendingFile.value = null
+      if (waveformRef.value && pendingFile.value) {
+        waveformRef.value.loadFile(pendingFile.value)
+        pendingFile.value = null
+      }
     })
   }
 })
 
 function handleAudioUpdated() {
   const blob = clipper.exportAudio()
-  if (blob) {
-    const url = URL.createObjectURL(blob)
-    waveformRef.value?.loadUrl(url)
+  if (blob && waveformRef.value) {
+    if (lastObjectUrl) {
+      URL.revokeObjectURL(lastObjectUrl)
+    }
+    lastObjectUrl = URL.createObjectURL(blob)
+    waveformRef.value.loadUrl(lastObjectUrl)
+    store.region = null
   }
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Scissors, Trash2, Undo2, RotateCcw, Play } from 'lucide-vue-next'
+import { Scissors, Trash2, Undo2, RotateCcw, Play, X } from 'lucide-vue-next'
 import { useAudioStore } from '@/stores/audio'
 import { useAudioClipper } from '@/composables/useAudioClipper'
 import { ElMessage } from 'element-plus'
@@ -56,8 +56,13 @@ function handleUndo() {
   }
 }
 
-function handleClearRegion() {
+function handlePlayRegion() {
   emit('play-region')
+}
+
+function handleClearRegion() {
+  store.region = null
+  ElMessage.info('已清除选区')
 }
 
 function handleReset() {
@@ -100,10 +105,19 @@ function handleReset() {
         <button
           class="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-bg-hover/50 border border-border-custom/50 text-text-secondary text-sm hover:text-accent hover:border-accent/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           :disabled="!store.hasRegion"
-          @click="handleClearRegion"
+          @click="handlePlayRegion"
         >
           <Play class="w-4 h-4" />
           播放选区
+        </button>
+
+        <button
+          class="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-bg-hover/50 border border-border-custom/50 text-text-secondary text-sm hover:text-accent-warm hover:border-accent-warm/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          :disabled="!store.hasRegion"
+          @click="handleClearRegion"
+        >
+          <X class="w-4 h-4" />
+          清除
         </button>
       </div>
 
