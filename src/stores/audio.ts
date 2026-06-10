@@ -21,6 +21,8 @@ export const useAudioStore = defineStore('audio', () => {
   const exportFormat = ref<'wav' | 'mp3'>('wav')
   const isProcessing = ref(false)
   const pendingSource = ref<AudioSource>(null)
+  const fadeInDuration = ref(0)
+  const fadeOutDuration = ref(0)
 
   const hasFile = computed(() => !!file.value)
   const hasRegion = computed(() => !!region.value)
@@ -90,6 +92,8 @@ export const useAudioStore = defineStore('audio', () => {
     exportFormat.value = 'wav'
     isProcessing.value = false
     pendingSource.value = null
+    fadeInDuration.value = 0
+    fadeOutDuration.value = 0
   }
 
   return {
@@ -107,6 +111,8 @@ export const useAudioStore = defineStore('audio', () => {
     exportFormat,
     isProcessing,
     pendingSource,
+    fadeInDuration,
+    fadeOutDuration,
     hasFile,
     hasRegion,
     regionDuration,

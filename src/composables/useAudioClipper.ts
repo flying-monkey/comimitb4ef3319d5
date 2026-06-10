@@ -103,6 +103,46 @@ function removeRegion(audioBuffer: AudioBuffer, start: number, end: number): Aud
   return newBuffer
 }
 
+function applyFadeInOut(
+  audioBuffer: AudioBuffer,
+  fadeInSeconds: number,
+  fadeOutSeconds: number
+): AudioBuffer {
+  const sampleRate = audioBuffer.sampleRate
+  const numChannels = audioBuffer.numberOfChannels
+  const length = audioBuffer.length
+
+  const audioContext = new AudioContext()
+  const newBuffer = audioContext.createBuffer(numChannels, length, sampleRate)
+
+  const fadeInSamples = Math.floor(fadeInSeconds * sampleRate)
+  const fadeOutSamples = Math.floor(fadeOutSeconds * sampleRate)
+
+  for (let ch = 0; ch < numChannels; ch++) {
+    const sourceData = audioBuffer.getChannelData(ch)
+    const targetData = newBuffer.getChannelData(ch)
+
+    for (let i = 0; i < length; i++) {
+      let sample = sourceData[i]
+
+      if (fadeInSamples > 0 && i < fadeInSamples) {
+        const gain = i / fadeInSamples
+        sample *= gain
+      }
+
+      if (fadeOutSamples > 0 && i >= length - fadeOutSamples) {
+        const fadeOutIndex = i - (length - fadeOutSamples)
+        const gain = 1 - fadeOutIndex / fadeOutSamples
+        sample *= gain
+      }
+
+      targetData[i] = sample
+    }
+  }
+
+  return newBuffer
+}
+
 function audioBufferToWavBlob(audioBuffer: AudioBuffer): Blob {
   return encodeWAV(audioBuffer)
 }
@@ -114,7 +154,14 @@ export function useAudioClipper() {
     if (!store.audioBuffer || !store.region) return null
     const { start, end } = store.region
     store.pushHistory(store.audioBuffer)
-    const newBuffer = extractRegion(store.audioBuffer, start, end)
+    let newBuffer = extractRegion(store.audioBuffer, start, end)
+    if (store.fadeInDuration > 0 || store.fadeOutDuration > 0) {
+      const maxFade = Math.min(store.fadeInDuration, store.fadeOutDuration)
+      const halfDuration = (end - start) / 2
+      const safeFadeIn = Math.min(store.fadeInDuration, halfDuration)
+      const safeFadeOut = Math.min(store.fadeOutDuration, halfDuration)
+      newBuffer = applyFadeInOut(newBuffer, safeFadeIn, safeFadeOut)
+    }
     store.setAudioBuffer(newBuffer)
     return newBuffer
   }
@@ -145,7 +192,13 @@ export function useAudioClipper() {
   function exportSelection(): Blob | null {
     if (!store.audioBuffer || !store.region) return null
     const { start, end } = store.region
-    const extracted = extractRegion(store.audioBuffer, start, end)
+    let extracted = extractRegion(store.audioBuffer, start, end)
+    if (store.fadeInDuration > 0 || store.fadeOutDuration > 0) {
+      const halfDuration = (end - start) / 2
+      const safeFadeIn = Math.min(store.fadeInDuration, halfDuration)
+      const safeFadeOut = Math.min(store.fadeOutDuration, halfDuration)
+      extracted = applyFadeInOut(extracted, safeFadeIn, safeFadeOut)
+    }
     return audioBufferToWavBlob(extracted)
   }
 

@@ -1,11 +1,23 @@
 <script setup lang="ts">
-import { Scissors, Trash2, Undo2, RotateCcw, Play, X } from 'lucide-vue-next'
+import { ref, computed } from 'vue'
+import { Scissors, Trash2, Undo2, RotateCcw, Play, X, Volume2, VolumeX } from 'lucide-vue-next'
 import { useAudioStore } from '@/stores/audio'
 import { useAudioClipper } from '@/composables/useAudioClipper'
 import { ElMessage } from 'element-plus'
 
 const store = useAudioStore()
 const clipper = useAudioClipper()
+
+const fadeInValue = ref(store.fadeInDuration)
+const fadeOutValue = ref(store.fadeOutDuration)
+
+function handleFadeInChange(val: number) {
+  store.fadeInDuration = val
+}
+
+function handleFadeOutChange(val: number) {
+  store.fadeOutDuration = val
+}
 
 const emit = defineEmits<{
   (e: 'audio-updated'): void
@@ -134,6 +146,56 @@ function handleReset() {
           <RotateCcw class="w-3.5 h-3.5" />
           重置
         </button>
+      </div>
+    </div>
+
+    <div v-if="store.hasFile" class="mt-4 pt-4 border-t border-border-custom/30">
+      <div class="flex items-center gap-2 mb-3">
+        <Volume2 class="w-4 h-4 text-accent" />
+        <span class="text-sm font-medium text-text-primary">淡入淡出效果</span>
+        <span class="text-xs text-text-muted">（应用于选区裁剪和播放）</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="flex items-center gap-3">
+          <label class="text-xs text-text-secondary w-16 shrink-0">淡入时长</label>
+          <div class="flex-1 flex items-center gap-3">
+            <el-slider
+              v-model="fadeInValue"
+              :min="0"
+              :max="5"
+              :step="0.1"
+              :disabled="!store.hasRegion"
+              @change="handleFadeInChange"
+            />
+            <span class="text-xs text-text-muted w-12 text-right font-mono">
+              {{ fadeInValue.toFixed(1) }}s
+            </span>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="text-xs text-text-secondary w-16 shrink-0">淡出时长</label>
+          <div class="flex-1 flex items-center gap-3">
+            <el-slider
+              v-model="fadeOutValue"
+              :min="0"
+              :max="5"
+              :step="0.1"
+              :disabled="!store.hasRegion"
+              @change="handleFadeOutChange"
+            />
+            <span class="text-xs text-text-muted w-12 text-right font-mono">
+              {{ fadeOutValue.toFixed(1) }}s
+            </span>
+          </div>
+        </div>
+      </div>
+      <div v-if="store.hasRegion && (fadeInValue > 0 || fadeOutValue > 0)" class="mt-3 text-xs text-text-muted">
+        <span v-if="store.regionDuration < fadeInValue + fadeOutValue" class="text-accent-warm">
+          ⚠ 选区时长较短，淡入淡出将自动适配为选区时长的一半
+        </span>
+        <span v-else>
+          ✓ 淡入 {{ fadeInValue.toFixed(1) }}s + 淡出 {{ fadeOutValue.toFixed(1) }}s，共 {{ (fadeInValue + fadeOutValue).toFixed(1) }}s
+        </span>
       </div>
     </div>
 

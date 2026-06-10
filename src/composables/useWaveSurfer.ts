@@ -9,6 +9,9 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
   let regionsPlugin: RegionsPlugin | null = null
   let activeRegion: any = null
   const isReady = ref(false)
+  let fadeAnimationId: number | null = null
+  let originalVolume = 0.8
+  let isFading = false
 
   function init() {
     if (!containerRef.value) return
@@ -47,6 +50,7 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
       }
       
       wavesurfer!.setVolume(store.volume)
+      originalVolume = store.volume
       wavesurfer!.setPlaybackRate(store.playbackRate)
     })
 
@@ -63,6 +67,8 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
     })
 
     wavesurfer.on('finish', () => {
+      stopFadeAnimation()
+      wavesurfer?.setVolume(originalVolume)
       store.isPlaying = false
       store.currentTime = store.duration
     })
@@ -96,7 +102,8 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
 
     regionsPlugin.on('region-clicked', (region: any, e: MouseEvent) => {
       e.stopPropagation()
-      wavesurfer?.play(region.start, region.end)
+      store.region = { start: region.start, end: region.end }
+      playRegion()
     })
   }
 
@@ -135,19 +142,25 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
 
   function play() {
     if (wavesurfer) {
+      stopFadeAnimation()
+      wavesurfer.setVolume(originalVolume)
       wavesurfer.play()
     }
   }
 
   function pause() {
     if (wavesurfer) {
+      stopFadeAnimation()
       wavesurfer.pause()
+      wavesurfer.setVolume(originalVolume)
     }
   }
 
   function stop() {
     if (wavesurfer) {
+      stopFadeAnimation()
       wavesurfer.stop()
+      wavesurfer.setVolume(originalVolume)
     }
     store.currentTime = 0
     store.isPlaying = false
@@ -159,15 +172,89 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
     }
   }
 
+  function stopFadeAnimation() {
+    if (fadeAnimationId !== null) {
+      cancelAnimationFrame(fadeAnimationId)
+      fadeAnimationId = null
+    }
+    isFading = false
+  }
+
+  function fadeTo(targetVolume: number, duration: number, onComplete?: () => void) {
+    if (!wavesurfer) return
+
+    stopFadeAnimation()
+    isFading = true
+
+    const startVolume = wavesurfer.getVolume()
+    const startTime = performance.now()
+
+    function animate(currentTime: number) {
+      if (!wavesurfer) return
+
+      const elapsed = (currentTime - startTime) / 1000
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      const currentVol = startVolume + (targetVolume - startVolume) * eased
+
+      wavesurfer.setVolume(currentVol)
+
+      if (progress < 1) {
+        fadeAnimationId = requestAnimationFrame(animate)
+      } else {
+        isFading = false
+        fadeAnimationId = null
+        onComplete?.()
+      }
+    }
+
+    fadeAnimationId = requestAnimationFrame(animate)
+  }
+
   function playRegion() {
     if (!activeRegion || !wavesurfer || !store.hasRegion) return
     const { start, end } = store.region
-    wavesurfer.play(start, end)
+    const regionDuration = end - start
+    const fadeIn = Math.min(store.fadeInDuration, regionDuration / 2)
+    const fadeOut = Math.min(store.fadeOutDuration, regionDuration / 2)
+    const hasFade = fadeIn > 0 || fadeOut > 0
+
+    if (hasFade) {
+      stopFadeAnimation()
+      originalVolume = store.volume
+      wavesurfer.setVolume(0)
+      wavesurfer.play(start, end)
+
+      if (fadeIn > 0) {
+        fadeTo(originalVolume, fadeIn)
+      } else {
+        wavesurfer.setVolume(originalVolume)
+      }
+
+      if (fadeOut > 0) {
+        const fadeOutStartTime = end - fadeOut - start
+        const checkFadeOut = () => {
+          if (!wavesurfer || !store.isPlaying) return
+          const currentTimeInRegion = wavesurfer.getCurrentTime() - start
+          if (currentTimeInRegion >= fadeOutStartTime && !isFading) {
+            fadeTo(0, fadeOut)
+          } else if (currentTimeInRegion < regionDuration) {
+            requestAnimationFrame(checkFadeOut)
+          }
+        }
+        requestAnimationFrame(checkFadeOut)
+      }
+    } else {
+      wavesurfer.play(start, end)
+    }
   }
 
   function setVolume(vol: number) {
     store.volume = vol
-    wavesurfer?.setVolume(vol)
+    originalVolume = vol
+    if (!isFading) {
+      wavesurfer?.setVolume(vol)
+    }
   }
 
   function setPlaybackRate(rate: number) {
@@ -201,6 +288,7 @@ export function useWaveSurfer(containerRef: Ref<HTMLElement | null>) {
   }
 
   function destroy() {
+    stopFadeAnimation()
     wavesurfer?.destroy()
     wavesurfer = null
     regionsPlugin = null
